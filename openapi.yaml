@@ -4,7 +4,11 @@ info:
   version: 1.0.0-oas3.1
   description: Hệ thống API cung cấp dịch vụ nhận diện khuôn mặt (Core Business - AI Vision).
   contact:
+<<<<<<< HEAD
     name: FIT4110 Nhóm 16 (B4)
+=======
+    name: FIT4110 Nhóm 11
+>>>>>>> a285bfa7c4a8ff3a3099a23bab9000b718f2053c
     email: 1771020750@dainam.edu.vn
 servers:
   - url: http://localhost:4010
