@@ -1,10 +1,10 @@
 openapi: 3.1.0
 info:
-  title: AI Vision Analysis Service API
+  title: AI Vision Face Match API
   version: 1.0.0-oas3.1
-  description: Hệ thống API cung cấp dịch vụ phân tích hình ảnh bằng AI (nhận diện khuôn mặt, phát hiện đối tượng).
+  description: Hệ thống API cung cấp dịch vụ nhận diện khuôn mặt (Core Business - AI Vision).
   contact:
-    name: FIT4110 Nhóm 16
+    name: FIT4110 Nhóm 16 (B4)
     email: 1771020750@dainam.edu.vn
 servers:
   - url: http://localhost:4010
@@ -14,10 +14,8 @@ servers:
 tags:
   - name: health
     description: Kiểm tra trạng thái service
-  - name: analyses
-    description: Quản lý các yêu cầu phân tích hình ảnh
-  - name: vision-events
-    description: Tiếp nhận kết quả phân tích từ AI Engine (Polymorphism)
+  - name: face-match
+    description: Xử lý nhận diện khuôn mặt
 security:
   - bearerAuth: []
 paths:
@@ -42,50 +40,50 @@ paths:
                     status: ok
                     service: ai-vision-service
                     time: '2026-05-20T08:00:00Z'
-  /analyses:
+  /vision/face-match:
     post:
-      operationId: createAnalysis
-      summary: Gửi yêu cầu phân tích ảnh
-      description: Tạo một job mới để AI Engine tiến hành phân tích hình ảnh được cung cấp.
+      operationId: matchFace
+      summary: Nhận diện khuôn mặt từ ảnh
+      description: |
+        Endpoint nhận URL ảnh và phân tích khuôn mặt. 
+        **Ràng buộc kỹ thuật (SLA & Limit):**
+        - SLA: Phản hồi trong vòng 3 giây (p99). Khuyến cáo Consumer cài đặt timeout 3s và fail-closed.
+        - Kích thước ảnh thực tế tải về từ URL không được vượt quá 4MB.
       tags:
-        - analyses
+        - face-match
+      parameters:
+        - $ref: '#/components/parameters/CorrelationIdHeader'
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/CreateAnalysisRequest'
+              $ref: '#/components/schemas/FaceMatchRequest'
             examples:
-              newAnalysis:
+              validRequest:
                 value:
-                  sourceSystem: mobile-app
-                  analysisType: FACE_RECOGNITION
-                  imageUrl: https://example.com/images/sample.jpg
-                  priority: HIGH
+                  imageUrl: https://example.com/images/guest-face.jpg
       responses:
-        '201':
-          description: Yêu cầu phân tích đã được tạo
+        '200':
+          description: Xử lý thành công, trả về điểm tin cậy
           headers:
-            Location:
-              description: URI của job phân tích vừa tạo.
-              schema:
-                type: string
-                format: uri
+            X-Correlation-Id:
+              $ref: '#/components/headers/CorrelationIdHeaderResponse'
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Analysis'
+                $ref: '#/components/schemas/FaceMatchResponse'
               examples:
-                created:
+                successMatch:
                   value:
-                    id: 0196fb3d-4ad7-7d1e-9f49-5d5148d2babc
-                    sourceSystem: mobile-app
-                    analysisType: FACE_RECOGNITION
-                    imageUrl: https://example.com/images/sample.jpg
-                    priority: HIGH
-                    status: PENDING
-                    createdAt: '2026-05-20T08:00:00Z'
-                    completedAt: null
+                    detectionId: 0196fb3d-4ad7-7d1e-9f49-5d5148d2babc
+                    userId: NV-1714
+                    confidence: 0.98
+                lowConfidence:
+                  value:
+                    detectionId: 0196fb3d-4ad7-7d1e-9f49-5d5148d2babd
+                    userId: null
+                    confidence: 0.45
         '400':
           $ref: '#/components/responses/BadRequest'
         '401':
@@ -94,168 +92,32 @@ paths:
           $ref: '#/components/responses/UnprocessableEntity'
         '500':
           $ref: '#/components/responses/InternalServerError'
+  /vision/detections/{detectionId}:
     get:
-      operationId: listAnalyses
-      summary: Lấy danh sách các yêu cầu phân tích
-      description: Lấy danh sách lịch sử phân tích với cursor-based pagination.
+      operationId: getDetectionById
+      summary: Lấy chi tiết lịch sử nhận diện
+      description: Tra cứu lại kết quả nhận diện khuôn mặt dựa trên UUID.
       tags:
-        - analyses
+        - face-match
       parameters:
-        - $ref: '#/components/parameters/Cursor'
-        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/CorrelationIdHeader'
+        - $ref: '#/components/parameters/DetectionId'
       responses:
         '200':
-          description: Danh sách yêu cầu
+          description: Chi tiết kết quả nhận diện
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/CorrelationIdHeaderResponse'
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/AnalysisPage'
-              examples:
-                firstPage:
-                  value:
-                    items:
-                      - id: 0196fb3d-4ad7-7d1e-9f49-5d5148d2babc
-                        sourceSystem: mobile-app
-                        analysisType: FACE_RECOGNITION
-                        imageUrl: https://example.com/images/sample.jpg
-                        priority: HIGH
-                        status: PROCESSING
-                        createdAt: '2026-05-20T08:00:00Z'
-                        completedAt: null
-                    nextCursor: null
-                    hasMore: false
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '500':
-          $ref: '#/components/responses/InternalServerError'
-  /analyses/recent:
-    get:
-      operationId: getRecentAnalyses
-      summary: Lấy các phân tích gần đây
-      description: Danh sách các phân tích vừa được gửi lên hệ thống.
-      tags:
-        - analyses
-      parameters:
-        - name: limit
-          in: query
-          required: false
-          description: Số item tối đa cần lấy.
-          schema:
-            type: integer
-            minimum: 1
-            maximum: 100
-            default: 20
-      responses:
-        '200':
-          description: Danh sách phân tích gần đây
-          content:
-            application/json:
-              schema:
-                type: object
-                additionalProperties: false
-                required:
-                  - items
-                properties:
-                  items:
-                    type: array
-                    minItems: 0
-                    maxItems: 100
-                    items:
-                      $ref: '#/components/schemas/Analysis'
-              examples:
-                recentAnalyses:
-                  value:
-                    items: []
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-        '500':
-          $ref: '#/components/responses/InternalServerError'
-  /analyses/{analysisId}:
-    get:
-      operationId: getAnalysisById
-      summary: Lấy chi tiết một phiên phân tích
-      description: Lấy chi tiết trạng thái và kết quả phân tích theo UUID.
-      tags:
-        - analyses
-      parameters:
-        - $ref: '#/components/parameters/AnalysisId'
-      responses:
-        '200':
-          description: Chi tiết phân tích
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Analysis'
+                $ref: '#/components/schemas/DetectionResult'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '404':
           $ref: '#/components/responses/NotFound'
         '500':
           $ref: '#/components/responses/InternalServerError'
-  /vision-events:
-    post:
-      operationId: receiveVisionEvent
-      summary: Nhận kết quả từ AI Engine
-      description: Endpoint minh họa polymorphism cho ObjectDetectedEvent hoặc FaceDetectedEvent.
-      tags:
-        - vision-events
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/VisionEvent'
-            examples:
-              objectEvent:
-                value:
-                  eventType: OBJECT_DETECTED
-                  eventId: 0196fb3d-4ad7-7d1e-9f49-5d5148d2babc
-                  analysisId: 0196fb3d-4ad7-7d1e-9f49-5d5148d2babc
-                  label: Car
-                  confidence: 0.98
-                  timestamp: '2026-05-20T08:01:00Z'
-              faceEvent:
-                value:
-                  eventType: FACE_DETECTED
-                  eventId: 0196fb3d-4ad7-7d1e-9f49-5d5148d2babd
-                  analysisId: 0196fb3d-4ad7-7d1e-9f49-5d5148d2babc
-                  emotion: Happy
-                  confidence: 0.95
-                  timestamp: '2026-05-20T08:01:00Z'
-      responses:
-        '201':
-          description: Event đã được ghi nhận
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/EventAccepted'
-        '400':
-          $ref: '#/components/responses/BadRequest'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '409':
-          $ref: '#/components/responses/Conflict'
-        '422':
-          $ref: '#/components/responses/UnprocessableEntity'
-webhooks:
-  analysisCompleted:
-    post:
-      operationId: onAnalysisCompleted
-      summary: Webhook khi phân tích hoàn tất
-      description: Bắn sự kiện về Client khi quá trình phân tích AI hoàn thành.
-      tags:
-        - analyses
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/Analysis'
-      responses:
-        '200':
-          description: Consumer đã nhận webhook
 components:
   securitySchemes:
     bearerAuth:
@@ -263,35 +125,28 @@ components:
       scheme: bearer
       bearerFormat: JWT
   parameters:
-    AnalysisId:
-      name: analysisId
+    DetectionId:
+      name: detectionId
       in: path
       required: true
-      description: UUID của phiên phân tích.
+      description: UUID của phiên nhận diện.
       schema:
         type: string
         format: uuid
-    Cursor:
-      name: cursor
-      in: query
-      required: false
-      description: Cursor dùng để lấy trang tiếp theo.
+    CorrelationIdHeader:
+      name: X-Correlation-Id
+      in: header
+      required: true
+      description: Tracing ID định danh request xuyên suốt các service.
       schema:
-        type:
-          - string
-          - 'null'
-        minLength: 1
-        maxLength: 200
-    Limit:
-      name: limit
-      in: query
-      required: false
-      description: Số item tối đa mỗi trang.
+        type: string
+        format: uuid
+  headers:
+    CorrelationIdHeaderResponse:
+      description: Trả lại Tracing ID đã nhận từ request.
       schema:
-        type: integer
-        minimum: 1
-        maximum: 100
-        default: 20
+        type: string
+        format: uuid
   schemas:
     HealthStatus:
       type: object
@@ -318,235 +173,66 @@ components:
           format: date-time
           description: Thời điểm kiểm tra.
           example: '2026-05-20T08:00:00Z'
-    CreateAnalysisRequest:
+    FaceMatchRequest:
       type: object
       additionalProperties: false
       required:
-        - sourceSystem
-        - analysisType
         - imageUrl
       properties:
-        sourceSystem:
-          type: string
-          minLength: 2
-          maxLength: 80
-          pattern: ^[a-z0-9-]+$
-          description: Hệ thống gọi API.
-          example: mobile-app
-        analysisType:
-          type: string
-          enum:
-            - OBJECT_DETECTION
-            - FACE_RECOGNITION
-            - OCR_TEXT_EXTRACTION
-          description: Loại hình phân tích.
-          example: FACE_RECOGNITION
-        priority:
-          $ref: '#/components/schemas/AnalysisPriority'
         imageUrl:
           type: string
           format: uri
           minLength: 5
-          maxLength: 1000
-          description: URL hình ảnh.
-          example: https://example.com/images/sample.jpg
-    Analysis:
+          maxLength: 2048
+          description: Đường dẫn URL đến hình ảnh (Giới hạn 2048 ký tự).
+          example: https://example.com/images/guest-face.jpg
+    FaceMatchResponse:
       type: object
       additionalProperties: false
       required:
-        - id
-        - sourceSystem
-        - analysisType
-        - imageUrl
-        - status
-        - createdAt
+        - detectionId
+        - confidence
       properties:
-        id:
+        detectionId:
           type: string
           format: uuid
-          description: UUID của phiên phân tích.
+          description: UUID định danh phiên phân tích.
           example: 0196fb3d-4ad7-7d1e-9f49-5d5148d2babc
-        sourceSystem:
-          type: string
-          minLength: 2
-          maxLength: 80
-          pattern: ^[a-z0-9-]+$
-          description: Hệ thống gọi API.
-          example: mobile-app
-        analysisType:
-          type: string
-          enum:
-            - OBJECT_DETECTION
-            - FACE_RECOGNITION
-            - OCR_TEXT_EXTRACTION
-          description: Loại hình phân tích.
-          example: FACE_RECOGNITION
-        priority:
-          $ref: '#/components/schemas/AnalysisPriority'
-        imageUrl:
-          type: string
-          format: uri
-          minLength: 5
-          maxLength: 1000
-          description: URL hình ảnh.
-          example: https://example.com/images/sample.jpg
-        status:
-          type: string
-          enum:
-            - PENDING
-            - PROCESSING
-            - COMPLETED
-            - FAILED
-          description: Trạng thái xử lý.
-          example: PROCESSING
-        createdAt:
-          type: string
-          format: date-time
-          description: Thời điểm tạo.
-          example: '2026-05-20T08:00:00Z'
-        completedAt:
+        userId:
           type:
             - string
             - 'null'
-          format: date-time
-          description: Thời điểm phân tích xong.
-          example: null
-    AnalysisPriority:
-      type: string
-      enum:
-        - LOW
-        - NORMAL
-        - HIGH
-      description: Mức độ ưu tiên.
-      example: NORMAL
-    AnalysisPage:
-      type: object
-      additionalProperties: false
-      required:
-        - items
-        - nextCursor
-        - hasMore
-      properties:
-        items:
-          type: array
-          minItems: 0
-          maxItems: 100
-          items:
-            $ref: '#/components/schemas/Analysis'
-        nextCursor:
-          type:
-            - string
-            - 'null'
-          description: Cursor trang tiếp theo.
-          example: null
-        hasMore:
-          type: boolean
-          description: Còn dữ liệu hay không.
-          example: false
-    VisionEvent:
-      oneOf:
-        - $ref: '#/components/schemas/ObjectDetectedEvent'
-        - $ref: '#/components/schemas/FaceDetectedEvent'
-      discriminator:
-        propertyName: eventType
-        mapping:
-          OBJECT_DETECTED: '#/components/schemas/ObjectDetectedEvent'
-          FACE_DETECTED: '#/components/schemas/FaceDetectedEvent'
-    ObjectDetectedEvent:
-      type: object
-      additionalProperties: false
-      required:
-        - eventType
-        - eventId
-        - analysisId
-        - label
-        - confidence
-        - timestamp
-      properties:
-        eventType:
-          type: string
-          const: OBJECT_DETECTED
-          description: Loại event.
-          example: OBJECT_DETECTED
-        eventId:
-          type: string
-          format: uuid
-          description: UUID của event.
-        analysisId:
-          type: string
-          format: uuid
-          description: ID của phiên phân tích.
-        label:
-          type: string
-          minLength: 1
-          maxLength: 100
-          description: Tên vật thể.
-          example: Car
-        confidence:
-          type: number
-          minimum: 0
-          maximum: 1
-          description: Độ tin cậy.
-          example: 0.98
-        timestamp:
-          type: string
-          format: date-time
-          description: Thời điểm phát hiện.
-    FaceDetectedEvent:
-      type: object
-      additionalProperties: false
-      required:
-        - eventType
-        - eventId
-        - analysisId
-        - emotion
-        - confidence
-        - timestamp
-      properties:
-        eventType:
-          type: string
-          const: FACE_DETECTED
-          description: Loại event.
-          example: FACE_DETECTED
-        eventId:
-          type: string
-          format: uuid
-          description: UUID của event.
-        analysisId:
-          type: string
-          format: uuid
-          description: ID của phiên phân tích.
-        emotion:
-          type: string
           minLength: 1
           maxLength: 50
-          description: Cảm xúc.
-          example: Happy
+          description: Mã nhân viên (null nếu model không nhận diện được ai).
+          example: NV-1714
         confidence:
           type: number
           minimum: 0
           maximum: 1
-          description: Độ tin cậy.
-          example: 0.95
-        timestamp:
-          type: string
-          format: date-time
-          description: Thời điểm nhận diện.
-    EventAccepted:
-      type: object
-      additionalProperties: false
-      required:
-        - eventId
-        - acceptedAt
-      properties:
-        eventId:
-          type: string
-          format: uuid
-          description: UUID của event được nhận.
-        acceptedAt:
-          type: string
-          format: date-time
-          description: Thời điểm hệ thống ghi nhận event.
+          description: Độ tin cậy của kết quả (0.0 đến 1.0).
+          example: 0.98
+    DetectionResult:
+      allOf:
+        - $ref: '#/components/schemas/FaceMatchResponse'
+        - type: object
+          additionalProperties: false
+          required:
+            - status
+            - timestamp
+          properties:
+            status:
+              type: string
+              enum:
+                - SUCCESS
+                - FAILED
+              description: Trạng thái của phiên xử lý.
+              example: SUCCESS
+            timestamp:
+              type: string
+              format: date-time
+              description: Thời điểm thực hiện xử lý.
+              example: '2026-05-20T08:01:00Z'
     Problem:
       type: object
       additionalProperties: false
@@ -585,7 +271,7 @@ components:
             - 'null'
           format: uri
           description: URI của request gây lỗi.
-          example: https://api.campus.local/analyses
+          example: https://api.campus.local/vision/face-match
         errors:
           type: array
           minItems: 0
@@ -625,11 +311,11 @@ components:
             title: Dữ liệu không hợp lệ
             status: 400
             detail: Payload không đúng JSON Schema
-            instance: https://api.campus.local/analyses
+            instance: https://api.campus.local/vision/face-match
             errors:
-              - field: analysisType
-                code: ENUM_MISMATCH
-                message: analysisType không nằm trong danh sách cho phép
+              - field: imageUrl
+                code: MAX_LENGTH_EXCEEDED
+                message: Độ dài chuỗi vượt quá 2048 ký tự
     Unauthorized:
       description: Thiếu hoặc sai thông tin xác thực
       content:
@@ -641,28 +327,16 @@ components:
             title: Chưa xác thực
             status: 401
             detail: Thiếu Bearer token
-            instance: https://api.campus.local/analyses/recent
+            instance: https://api.campus.local/vision/face-match
             errors: []
-    Forbidden:
-      description: Không có quyền thực hiện thao tác
-      content:
-        application/problem+json:
-          schema:
-            $ref: '#/components/schemas/Problem'
     NotFound:
       description: Resource không tồn tại
       content:
         application/problem+json:
           schema:
             $ref: '#/components/schemas/Problem'
-    Conflict:
-      description: Xung đột nghiệp vụ hoặc trùng idempotency key
-      content:
-        application/problem+json:
-          schema:
-            $ref: '#/components/schemas/Problem'
     UnprocessableEntity:
-      description: Payload đúng định dạng nhưng không hợp lệ về nghiệp vụ
+      description: Payload đúng định dạng nhưng vi phạm quy tắc nghiệp vụ (VD URL ảnh chết)
       content:
         application/problem+json:
           schema:
