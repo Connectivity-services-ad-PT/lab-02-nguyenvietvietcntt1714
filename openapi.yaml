@@ -4,7 +4,7 @@ info:
   version: 1.0.0-oas3.1
   description: Hệ thống API cung cấp dịch vụ phân tích hình ảnh bằng AI (nhận diện khuôn mặt, phát hiện đối tượng).
   contact:
-    name: FIT4110 Nhóm 16
+    name: FIT4110 Nhóm 11
     email: 1771020750@dainam.edu.vn
 servers:
   - url: http://localhost:4010
