@@ -5,8 +5,7 @@ info:
   description: Hệ thống API cung cấp dịch vụ nhận diện khuôn mặt (Core Business - AI Vision).
   contact:
     name: FIT4110 Nhóm 11 (B4)
-
-    email: 1771020750@dainam.edu.vn
+    email: nguyenvietviet005@gmail.com
 servers:
   - url: http://localhost:4010
     description: Prism mock server
@@ -80,11 +79,13 @@ paths:
                     detectionId: 0196fb3d-4ad7-7d1e-9f49-5d5148d2babc
                     userId: NV-1714
                     confidence: 0.98
+                    timestamp: '2026-05-20T08:01:00Z'
                 lowConfidence:
                   value:
                     detectionId: 0196fb3d-4ad7-7d1e-9f49-5d5148d2babd
                     userId: null
                     confidence: 0.45
+                    timestamp: '2026-05-20T08:01:00Z'
         '400':
           $ref: '#/components/responses/BadRequest'
         '401':
@@ -97,7 +98,7 @@ paths:
     get:
       operationId: getDetectionById
       summary: Lấy chi tiết lịch sử nhận diện
-      description: Tra cứu lại kết quả nhận diện khuôn mặt dựa trên UUID.
+      description: Tra cứu lại kết quả phân tích AI (Face hoặc Object) dựa trên UUID.
       tags:
         - face-match
       parameters:
@@ -105,7 +106,7 @@ paths:
         - $ref: '#/components/parameters/DetectionId'
       responses:
         '200':
-          description: Chi tiết kết quả nhận diện
+          description: Chi tiết kết quả nhận diện (Sử dụng Polymorphism)
           headers:
             X-Correlation-Id:
               $ref: '#/components/headers/CorrelationIdHeaderResponse'
@@ -113,6 +114,15 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/DetectionResult'
+              examples:
+                faceResult:
+                  value:
+                    detectionId: 0196fb3d-4ad7-7d1e-9f49-5d5148d2babc
+                    detectionType: FACE
+                    userId: NV-1714
+                    confidence: 0.98
+                    status: SUCCESS
+                    timestamp: '2026-05-20T08:01:00Z'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '404':
@@ -193,6 +203,7 @@ components:
       required:
         - detectionId
         - confidence
+        - timestamp
       properties:
         detectionId:
           type: string
@@ -213,27 +224,80 @@ components:
           maximum: 1
           description: Độ tin cậy của kết quả (0.0 đến 1.0).
           example: 0.98
+        timestamp:
+          type: string
+          format: date-time
+          description: Thời điểm hoàn tất phân tích.
+          example: '2026-05-20T08:01:00Z'
+    
+    # Polymorphism Schema: Áp dụng oneOf và discriminator
     DetectionResult:
-      allOf:
-        - $ref: '#/components/schemas/FaceMatchResponse'
-        - type: object
-          additionalProperties: false
-          required:
-            - status
-            - timestamp
-          properties:
-            status:
-              type: string
-              enum:
-                - SUCCESS
-                - FAILED
-              description: Trạng thái của phiên xử lý.
-              example: SUCCESS
-            timestamp:
-              type: string
-              format: date-time
-              description: Thời điểm thực hiện xử lý.
-              example: '2026-05-20T08:01:00Z'
+      oneOf:
+        - $ref: '#/components/schemas/FaceDetectionResult'
+        - $ref: '#/components/schemas/ObjectDetectionResult'
+      discriminator:
+        propertyName: detectionType
+        mapping:
+          FACE: '#/components/schemas/FaceDetectionResult'
+          OBJECT: '#/components/schemas/ObjectDetectionResult'
+          
+    FaceDetectionResult:
+      type: object
+      additionalProperties: false
+      required:
+        - detectionId
+        - detectionType
+        - confidence
+        - status
+        - timestamp
+      properties:
+        detectionId:
+          type: string
+          format: uuid
+        detectionType:
+          type: string
+          const: FACE
+        userId:
+          type:
+            - string
+            - 'null'
+        confidence:
+          type: number
+        status:
+          type: string
+          enum: [SUCCESS, FAILED]
+        timestamp:
+          type: string
+          format: date-time
+
+    ObjectDetectionResult:
+      type: object
+      additionalProperties: false
+      required:
+        - detectionId
+        - detectionType
+        - label
+        - confidence
+        - status
+        - timestamp
+      properties:
+        detectionId:
+          type: string
+          format: uuid
+        detectionType:
+          type: string
+          const: OBJECT
+        label:
+          type: string
+        confidence:
+          type: number
+        status:
+          type: string
+          enum: [SUCCESS, FAILED]
+        timestamp:
+          type: string
+          format: date-time
+
     Problem:
       type: object
       additionalProperties: false
